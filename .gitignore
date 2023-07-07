@@ -1,3 +1,4 @@
 /data/config.toml
 /data/logs/app.log
 /data/logs/logs.log
+/tests/

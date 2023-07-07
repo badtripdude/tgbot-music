@@ -6,6 +6,7 @@ import yandex_music
 from loguru import logger
 import logging
 import argparse
+import pytube
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-cp', '--config_path', default=r'..\data\config.toml', type=str)
@@ -16,6 +17,7 @@ args = parser.parse_args()
 logging.basicConfig(filename=r'..\data\logs\logs.log', filemode='w', level=logging.INFO)
 logger.add(r'..\data\logs\app.log', mode='a', level=0)
 
+# load config
 config = toml.load(args.config_path)
 
 # initialise clients
@@ -47,12 +49,35 @@ async def process_yandex_track(msg: aiogram.types.Message):
     )
 
 
+async def process_youtube_video(msg: aiogram.types.Message):
+    from io import BytesIO
+
+    yt = pytube.YouTube(msg.text, allow_oauth_cache=True, )
+    if 300 < yt.length:
+        await msg.answer('Длительность видео не может превышать 5 минут')
+        return
+    audio = yt.streams.get_audio_only()
+
+    buffer = BytesIO()
+    audio.stream_to_buffer(buffer)
+    buffer.seek(0)
+
+    bot_username = (await dispatcher.bot.me)['username']
+    await msg.answer_audio(buffer, title=audio.title, duration=yt.length,
+                           caption=f'<a href="https://t.me/{bot_username}">🎵 Сервис.Музыка</a>',
+                           thumb=yt.thumbnail_url,
+                           performer=yt.author,
+                           parse_mode='HTML')
+
+
 async def main():
     # initialise yandex client
     await ya_music_client.init()
 
     # register telegram message handlers
     dispatcher.register_message_handler(process_yandex_track, regexp=r'https://music.yandex.')
+    dispatcher.register_message_handler(process_youtube_video,
+                                        regexp='https://www.youtube.com/watch|https://youtu.be', )
     dispatcher.register_message_handler(process_start_command, commands=['start', 'help'], state='*')
 
     # create io tasks
