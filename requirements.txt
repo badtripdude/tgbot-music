@@ -1,0 +1,4 @@
+aiogram~=2.25.1
+toml~=0.10.2
+pytube~=15.0.0
+loguru~=0.7.0

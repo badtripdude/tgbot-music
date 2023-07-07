@@ -9,13 +9,14 @@ import argparse
 import pytube
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-cp', '--config_path', default=r'..\data\config.toml', type=str)
+parser.add_argument('-cp', '--config_path', default=r'../data/config.toml', type=str)
+parser.add_argument('-lp', '--logs_path', default=r'../data/logs/', type=str)
 
 args = parser.parse_args()
 
 # configure logs
-logging.basicConfig(filename=r'..\data\logs\logs.log', filemode='w', level=logging.INFO)
-logger.add(r'..\data\logs\app.log', mode='a', level=0)
+logging.basicConfig(filename=args.logs_path + r'logs.log', filemode='w', level=logging.INFO)
+logger.add(args.logs_path + r'app.log', mode='a', level=0)
 
 # load config
 config = toml.load(args.config_path)
