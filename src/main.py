@@ -27,7 +27,11 @@ dispatcher = aiogram.Dispatcher(bot=aiogram.Bot(token=config['TELEGRAMBOT']['tok
 
 
 async def process_start_command(msg: aiogram.types.Message):
-    text = '''Привет, отправь мне ссылку из сервиса ЯдексМузыка на трек ;)'''
+    text = '''Привет, отправль мне ссылку ;) 
+    
+На данный момент я поддерживаю сервисы:
+1) Яндекс Музыка
+2) Youtube '''
     await msg.answer(text)
 
 
@@ -52,11 +56,12 @@ async def process_yandex_track(msg: aiogram.types.Message):
 
 async def process_youtube_video(msg: aiogram.types.Message):
     from io import BytesIO
-
+    logger.info(f'process yt video from `{msg.from_user.id}`')
     yt = pytube.YouTube(msg.text, allow_oauth_cache=True, )
     if 300 < yt.length:
         await msg.answer('Длительность видео не может превышать 5 минут')
         return
+    logger.trace('getting audio...')
     audio = yt.streams.get_audio_only()
 
     buffer = BytesIO()

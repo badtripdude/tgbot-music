@@ -1,4 +1,5 @@
-aiogram~=2.25.1
-toml~=0.10.2
-pytube~=15.0.0
-loguru~=0.7.0
+aiogram==2.25.1
+loguru==0.7.0
+pytube@ git+https://github.com/badtripdude/pytube
+toml==0.10.2
+yandex-music==2.1.1
