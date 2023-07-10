@@ -7,6 +7,8 @@ from loguru import logger
 import logging
 import argparse
 import pytube
+import os
+import db
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-cp', '--config_path', default=r'../data/config.toml', type=str)
@@ -15,6 +17,7 @@ parser.add_argument('-lp', '--logs_path', default=r'../data/logs/', type=str)
 args = parser.parse_args()
 
 # configure logs
+os.makedirs(args.logs_path, exist_ok=True)
 logging.basicConfig(filename=args.logs_path + r'logs.log', filemode='w', level=logging.INFO)
 logger.add(args.logs_path + r'app.log', mode='a', level=0)
 
@@ -23,11 +26,35 @@ config = toml.load(args.config_path)
 
 # initialise clients
 ya_music_client = yandex_music.ClientAsync(token=config['YANDEXMUSIC']['token'])
-dispatcher = aiogram.Dispatcher(bot=aiogram.Bot(token=config['TELEGRAMBOT']['token']))
+dispatcher = aiogram.Dispatcher(bot=aiogram.Bot(token=config['TELEGRAMBOT']['token']), )
+
+# setup db params
+db.MysqlConnection.MYSQL_INFO = {
+    'host': config['DATABASE']['host'],
+    'user': config['DATABASE']['user'],
+    'password': config['DATABASE']['password'],
+    'db': config['DATABASE']['db_name'],
+}
+
+
+async def send_yamusic_track(msg: aiogram.types.Message, track: yandex_music.Track):
+    audio_bytes = await track.download_bytes_async()
+    bot_username = (await msg.bot.me)['username']
+    await msg.answer_audio(
+        audio_bytes,
+        caption=f'<a href="https://t.me/{bot_username}">🎵 Сервис.Музыка</a>',
+        parse_mode='HTML',
+        title=f'{track.title}{"" if not track.version else f" ({track.version})"}',
+        performer=f'{", ".join(track.artists_name())}',
+        thumb=(await track.download_og_image_bytes_async()),
+    )
 
 
 async def process_start_command(msg: aiogram.types.Message):
-    text = '''Привет, отправль мне ссылку ;) 
+    from db import Users
+    if not await Users.is_exist(msg.from_user):
+        await Users.register(msg.from_user)
+    text = '''Привет, отправь мне ссылку ;) 
     
 На данный момент я поддерживаю сервисы:
 1) Яндекс Музыка
@@ -42,16 +69,7 @@ async def process_yandex_track(msg: aiogram.types.Message):
 
     logger.info(f'process new track by `{msg.from_user.id}`')
     track, *_ = await ya_music_client.tracks([extract_track_id(msg.text)])
-    audio_bytes = await track.download_bytes_async()
-    bot_username = (await dispatcher.bot.me)['username']
-    await msg.answer_audio(
-        audio_bytes,
-        caption=f'<a href="https://t.me/{bot_username}">🎵 Сервис.Музыка</a>',
-        parse_mode='HTML',
-        title=f'{track.title}{"" if not track.version else f" ({track.version})"}',
-        performer=f'{", ".join(track.artists_name())}',
-        thumb=(await track.download_og_image_bytes_async()),
-    )
+    await send_yamusic_track(msg, track)
 
 
 async def process_youtube_video(msg: aiogram.types.Message):
@@ -76,6 +94,16 @@ async def process_youtube_video(msg: aiogram.types.Message):
                            parse_mode='HTML')
 
 
+async def process_search_request(msg: aiogram.types.Message):
+    res = await ya_music_client.search(text=msg.text,
+                                       type_='track')
+    if not res or not res.tracks:
+        await msg.answer('Ничего не удалось найти :(')
+        return
+    first_track, *_ = res.tracks.results
+    await send_yamusic_track(msg, first_track)
+
+
 async def main():
     # initialise yandex client
     await ya_music_client.init()
@@ -85,6 +113,7 @@ async def main():
     dispatcher.register_message_handler(process_youtube_video,
                                         regexp='https://www.youtube.com/watch|https://youtu.be', )
     dispatcher.register_message_handler(process_start_command, commands=['start', 'help'], state='*')
+    dispatcher.register_message_handler(process_search_request, content_types=aiogram.types.ContentType.TEXT)
 
     # create io tasks
     loop.create_task(dispatcher.start_polling())
