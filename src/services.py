@@ -7,8 +7,8 @@ import pytube
 import requests
 import yandex_music
 
-from src.base import YaMusic, Yt, UserRepo
-from src.ents import Track, User
+from base import YaMusic, Yt, UserRepo
+from ents import Track, User
 
 
 class Factory:
@@ -93,7 +93,7 @@ class MemoryUserRepo(UserRepo):
 class MysqlUserRepo(UserRepo):
     def __init__(self, host: str, user: str, password: str,
                  db_name: str):
-        from src import db
+        import db
         self.conn = db.MysqlConnection
         self.conn.MYSQL_INFO = {
             'host': host,

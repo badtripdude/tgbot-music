@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 
-from src.ents import Track
+from ents import Track
 
 
 class YaMusic(abc.ABC):
