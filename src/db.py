@@ -1,14 +1,19 @@
+import abc
 import asyncio
+from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 import aiogram
-from loguru import logger
 import aiomysql
-from typing import Any, Dict, List, Optional, Type, TypeVar, Union
+from loguru import logger
 
 T = TypeVar("T")
 
 
 class RawConnection:
+    @staticmethod
+    def is_connected() -> bool:
+        raise NotImplementedError
+
     @staticmethod
     def __make_request(
             sql: str,
@@ -52,6 +57,14 @@ class MysqlConnection(RawConnection):
                   'password': '',
                   'db': '',
                   }
+
+    @staticmethod
+    async def is_connected() -> bool:
+        try:
+            res = await MysqlConnection._make_request("SELECT VERSION()", fetch=True, mult=False)
+            return True
+        except:
+            return False
 
     @staticmethod
     async def __make_request(
@@ -122,30 +135,13 @@ class MysqlConnection(RawConnection):
                     return raw
 
 
-class Users(MysqlConnection):
+class UsersBase(abc.ABC):
     @staticmethod
+    @abc.abstractmethod
     async def register(user: aiogram.types.User):
-        sql = 'INSERT INTO `users` (`chat_id`, `full_name`, `username`) VALUES (%s, %s, %s)'
-        params = (user.id, user.full_name, user.username)
-        await Users._make_request(sql, params)
+        ...
 
     @staticmethod
+    @abc.abstractmethod
     async def is_exist(user: aiogram.types.User):
-        sql = 'SELECT * FROM `users` WHERE `chat_id` = %s'
-        params = (user.id,)
-        r = await Users._make_request(sql, params, fetch=True)
-        return bool(r)
-
-
-'''
-CREATE TABLE `users` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `chat_id` int NOT NULL,
-  `full_name` varchar(90) DEFAULT NULL,
-  `username` varchar(90) DEFAULT NULL,
-  `date` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `id_UNIQUE` (`id`),
-  UNIQUE KEY `chat_id_UNIQUE` (`chat_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-'''
+        ...

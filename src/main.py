@@ -1,14 +1,15 @@
+import argparse
 import asyncio
-import re
+import logging
+import os
+
 import aiogram
 import toml
-import yandex_music
 from loguru import logger
-import logging
-import argparse
-import pytube
-import os
-import db
+
+from src import services
+from src.base import YaMusic, UserRepo
+from src.ents import Track, User
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-cp', '--config_path', default=r'../data/config.toml', type=str)
@@ -19,43 +20,50 @@ args = parser.parse_args()
 # configure logs
 os.makedirs(args.logs_path, exist_ok=True)
 logging.basicConfig(filename=args.logs_path + r'logs.log', filemode='w', level=logging.INFO)
-logger.add(args.logs_path + r'app.log', mode='a', level=0)
+logger.add(args.logs_path + r'app.log', mode='w', level=0)
 
 # load config
 config = toml.load(args.config_path)
 
 # initialise clients
-ya_music_client = yandex_music.ClientAsync(token=config['YANDEXMUSIC']['token'])
+ya_music_client: YaMusic = services.Factory.create_yandex_music(token=config['YANDEXMUSIC']['token'])
+yt = services.Factory.create_pytube_client()
 dispatcher = aiogram.Dispatcher(bot=aiogram.Bot(token=config['TELEGRAMBOT']['token']), )
 
-# setup db params
-db.MysqlConnection.MYSQL_INFO = {
-    'host': config['DATABASE']['host'],
-    'user': config['DATABASE']['user'],
-    'password': config['DATABASE']['password'],
-    'db': config['DATABASE']['db_name'],
-}
+# setup db
 
-
-async def send_yamusic_track(msg: aiogram.types.Message, track: yandex_music.Track):
-    audio_bytes = await track.download_bytes_async()
-    bot_username = (await msg.bot.me)['username']
-    await msg.answer_audio(
-        audio_bytes,
-        caption=f'<a href="https://t.me/{bot_username}">🎵 Сервис.Музыка</a>',
-        parse_mode='HTML',
-        title=f'{track.title}{"" if not track.version else f" ({track.version})"}',
-        performer=f'{", ".join(track.artists_name())}',
-        thumb=(await track.download_og_image_bytes_async()),
+if config['DATABASE']['disabled']:
+    user_repo: UserRepo = services.Factory.create_memory_user_repo()
+else:
+    user_repo = services.Factory.create_mysql_user_repo(
+        host=config['DATABASE']['host'],
+        user=config['DATABASE']['user'],
+        password=config['DATABASE']['password'],
+        db_name=config['DATABASE']['db_name'],
     )
 
 
+async def send_track(track: Track, msg):
+    bot_username = (await msg.bot.me)['username']
+    await msg.answer_audio(track.audio, title=track.title,
+                           duration=track.duration,
+                           caption=f'<a href="https://t.me/{bot_username}">🎵 Сервис.Музыка</a>',
+                           thumb=track.thumb,
+                           performer=', '.join(track.artists),
+                           parse_mode='HTML')
+
+
+# controllers
+
 async def process_start_command(msg: aiogram.types.Message):
-    from db import Users
-    if not await Users.is_exist(msg.from_user):
-        await Users.register(msg.from_user)
+    user = User(id_=msg.from_user.id,
+                username=msg.from_user.username,
+                full_name=msg.from_user.full_name,
+                )
+    if not await user_repo.does_exist(user):
+        await user_repo.register(user)
     text = '''Привет, отправь мне ссылку ;) 
-    
+
 На данный момент я поддерживаю сервисы:
 1) Яндекс Музыка
 2) Youtube '''
@@ -63,51 +71,32 @@ async def process_start_command(msg: aiogram.types.Message):
 
 
 async def process_yandex_track(msg: aiogram.types.Message):
-    def extract_track_id(url: str):
-        res, = re.findall(r'album/(\d+)/track/(\d+)', url)
-        return f'{res[1]}:{res[0]}'
-
-    logger.info(f'process new track by `{msg.from_user.id}`')
-    track, *_ = await ya_music_client.tracks([extract_track_id(msg.text)])
-    await send_yamusic_track(msg, track)
+    logger.info(f'process ya track from `{msg.from_user.id}`')
+    track = await ya_music_client.extract_track_from_url(msg.text)
+    await send_track(track, msg)
 
 
 async def process_youtube_video(msg: aiogram.types.Message):
-    from io import BytesIO
     logger.info(f'process yt video from `{msg.from_user.id}`')
-    yt = pytube.YouTube(msg.text, allow_oauth_cache=True, )
-    if 300 < yt.length:
-        await msg.answer('Длительность видео не может превышать 5 минут')
+    track = await yt.extract_track_from_url(msg.text)
+    if 300 < track.duration:
+        await msg.answer('Длительность видео не может превышать 5 минут.')
         return
-    logger.trace('getting audio...')
-    audio = yt.streams.get_audio_only()
-
-    buffer = BytesIO()
-    audio.stream_to_buffer(buffer)
-    buffer.seek(0)
-
-    bot_username = (await dispatcher.bot.me)['username']
-    await msg.answer_audio(buffer, title=audio.title, duration=yt.length,
-                           caption=f'<a href="https://t.me/{bot_username}">🎵 Сервис.Музыка</a>',
-                           thumb=yt.thumbnail_url,
-                           performer=yt.author,
-                           parse_mode='HTML')
+    await send_track(track, msg)
 
 
 async def process_search_request(msg: aiogram.types.Message):
-    res = await ya_music_client.search(text=msg.text,
-                                       type_='track')
-    if not res or not res.tracks:
+    logger.info(f'process search request `{msg.text}` from `{msg.from_user.id}`')
+    track = await ya_music_client.search_first_track(msg.text)
+
+    if not track:
         await msg.answer('Ничего не удалось найти :(')
         return
-    first_track, *_ = res.tracks.results
-    await send_yamusic_track(msg, first_track)
+    await send_track(track, msg)
 
 
+# main
 async def main():
-    # initialise yandex client
-    await ya_music_client.init()
-
     # register telegram message handlers
     dispatcher.register_message_handler(process_yandex_track, regexp=r'https://music.yandex.')
     dispatcher.register_message_handler(process_youtube_video,

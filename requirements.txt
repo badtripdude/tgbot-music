@@ -4,3 +4,4 @@ pytube@ git+https://github.com/badtripdude/pytube
 toml==0.10.2
 yandex-music==2.1.1
 aiomysql==0.2.0
+requests==2.31.0
