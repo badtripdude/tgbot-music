@@ -7,9 +7,9 @@ import aiogram
 import toml
 from loguru import logger
 
-from src import services
-from src.base import YaMusic, UserRepo
-from src.ents import Track, User
+import services
+from base import YaMusic, UserRepo
+from ents import Track, User
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-cp', '--config_path', default=r'../data/config.toml', type=str)
