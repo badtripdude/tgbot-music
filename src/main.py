@@ -2,14 +2,17 @@ import argparse
 import asyncio
 import logging
 import os
+import sys
 
 import aiogram
 import toml
 from loguru import logger
 
-import services
-from base import YaMusic, UserRepo
-from ents import Track, User
+sys.path.extend(['../'])
+
+from core.entities import Track, User
+from core.services import YouTubeService, YandexMusicService, UserService
+from src.infrastructure import repository
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-cp', '--config_path', default=r'../data/config.toml', type=str)
@@ -26,21 +29,21 @@ logger.add(args.logs_path + r'app.log', mode='w', level=0)
 config = toml.load(args.config_path)
 
 # initialise clients
-ya_music_client: YaMusic = services.Factory.create_yandex_music(token=config['YANDEXMUSIC']['token'])
-yt = services.Factory.create_pytube_client()
+ya_music_client = YandexMusicService(repository.Factory.create_yandex_music(token=config['YANDEXMUSIC']['token']))
+yt = YouTubeService(repository.Factory.create_pytube_client())
 dispatcher = aiogram.Dispatcher(bot=aiogram.Bot(token=config['TELEGRAMBOT']['token']), )
 
-# setup db
+# setup user service
 
 if config['DATABASE']['disabled']:
-    user_repo: UserRepo = services.Factory.create_memory_user_repo()
+    user_service = UserService(repository.Factory.create_memory_user_repo())
 else:
-    user_repo = services.Factory.create_mysql_user_repo(
+    user_service = UserService(repository.Factory.create_mysql_user_repo(
         host=config['DATABASE']['host'],
         user=config['DATABASE']['user'],
         password=config['DATABASE']['password'],
         db_name=config['DATABASE']['db_name'],
-    )
+    ))
 
 
 async def send_track(track: Track, msg):
@@ -56,12 +59,11 @@ async def send_track(track: Track, msg):
 # controllers
 
 async def process_start_command(msg: aiogram.types.Message):
-    user = User(id_=msg.from_user.id,
+    user = User(telegram_chat_id=msg.from_user.id,
                 username=msg.from_user.username,
                 full_name=msg.from_user.full_name,
                 )
-    if not await user_repo.does_exist(user):
-        await user_repo.register(user)
+    await user_service.register(user)
     text = '''Привет, отправь мне ссылку ;) 
 
 На данный момент я поддерживаю сервисы:

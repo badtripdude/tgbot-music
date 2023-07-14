@@ -7,18 +7,18 @@ import pytube
 import requests
 import yandex_music
 
-from base import YaMusic, Yt, UserRepo
-from ents import Track, User
+from src.core.base_repository import YandexMusic, Youtube, UserRepo
+from src.core.entities import Track, User
 
 
 class Factory:
     @staticmethod
-    def create_yandex_music(token: str) -> YaMusic:
-        return YandexMusic(token=token)
+    def create_yandex_music(token: str) -> SimpleYandexMusic:
+        return SimpleYandexMusic(token=token)
 
     @staticmethod
-    def create_pytube_client() -> Yt:
-        return PytubeYt()
+    def create_pytube_client() -> Youtube:
+        return PyTube()
 
     @staticmethod
     def create_memory_user_repo() -> UserRepo:
@@ -29,7 +29,7 @@ class Factory:
         return MysqlUserRepo(host, user, password, db_name)
 
 
-class YandexMusic(YaMusic):
+class SimpleYandexMusic(YandexMusic):
     def __init__(self, token):
         import yandex_music
         self.client = yandex_music.ClientAsync(token=token)
@@ -65,7 +65,7 @@ class YandexMusic(YaMusic):
         return f'{res[1]}:{res[0]}'
 
 
-class PytubeYt(Yt):
+class PyTube(Youtube):
     async def extract_track_from_url(self, url: str) -> Track:
         yt = pytube.YouTube(url, allow_oauth_cache=True, )
         audio = yt.streams.get_audio_only()
@@ -80,20 +80,20 @@ class PytubeYt(Yt):
 
 
 class MemoryUserRepo(UserRepo):
+    async def get_by_id(self, id_: int):
+        return self.lst[id_]
+
     def __init__(self):
         self.lst = []
 
-    async def register(self, user: User):
+    async def add_user(self, user: User):
         self.lst.append(user.id_)
-
-    async def does_exist(self, user: User) -> bool:
-        return user.id_ in self.lst
 
 
 class MysqlUserRepo(UserRepo):
     def __init__(self, host: str, user: str, password: str,
                  db_name: str):
-        import db
+        from . import db
         self.conn = db.MysqlConnection
         self.conn.MYSQL_INFO = {
             'host': host,
@@ -102,16 +102,16 @@ class MysqlUserRepo(UserRepo):
             'db': db_name,
         }
 
-    async def register(self, user: User):
+    async def add_user(self, user: User):
         sql = 'INSERT INTO `users` (`chat_id`, `full_name`, `username`) VALUES (%s, %s, %s)'
-        params = (user.id_, user.full_name, user.username)
+        params = (user.telegram_chat_id, user.full_name, user.username)
         await self.conn._make_request(sql, params)
 
-    async def does_exist(self, user: User):
+    async def get_by_id(self, id_) -> User:
         sql = 'SELECT * FROM `users` WHERE `chat_id` = %s'
-        params = (user.id_,)
-        r = await self.conn._make_request(sql, params, fetch=True)
-        return bool(r)
+        params = (id_,)
+        r: dict = await self.conn._make_request(sql, params, fetch=True)
+        return User(id_=r['chat_id'], username=r['username'], full_name=r['full_name'])
 
     '''
 CREATE TABLE `users` (

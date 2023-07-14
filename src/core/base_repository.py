@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import abc
 
-from ents import Track
+from .entities import Track, User
 
 
-class YaMusic(abc.ABC):
+class YandexMusic(abc.ABC):
     @abc.abstractmethod
     async def search_first_track(self, text: str) -> Track | None:
         ...
@@ -15,7 +15,7 @@ class YaMusic(abc.ABC):
         ...
 
 
-class Yt(abc.ABC):
+class Youtube(abc.ABC):
     @abc.abstractmethod
     async def extract_track_from_url(self, url: str) -> Track:
         ...
@@ -23,9 +23,8 @@ class Yt(abc.ABC):
 
 class UserRepo(abc.ABC):
     @abc.abstractmethod
-    async def register(self, user):
+    async def add_user(self, user: User):
         ...
 
     @abc.abstractmethod
-    async def does_exist(self, by) -> bool:
-        ...
+    async def get_by_id(self, id_: int) -> User: ...

@@ -12,6 +12,7 @@ class Track:
 
 @dataclass()
 class User:
-    id_: int
+    id_: int = None
     username: str = None
     full_name: str = None
+    telegram_chat_id: int = None
