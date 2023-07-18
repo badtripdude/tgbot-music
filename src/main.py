@@ -102,8 +102,7 @@ async def process_start_command(msg: aiogram.types.Message):
 
 * поиск по тексту на данный момент производится с помощью сервиса ЯндексМузыка
 
-
-исходный код бота: https://github.com/badtripdude/tgbot-music'''
+'''
     await msg.answer(text)
 
 
