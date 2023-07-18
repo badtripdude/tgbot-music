@@ -38,26 +38,31 @@ class SimpleYandexMusic(YandexMusic):
     async def _init(self):
         await self.client.init()
 
-    async def search_first_track(self, text: str) -> Track | None:
-        res = await self.client.search(text=text,
-                                       type_='track')
-        if not res or not res.tracks:
-            return
-        first_track, *_ = res.tracks.results
-        first_track: yandex_music.Track
-
-        return Track(first_track.title, first_track.duration_ms // 1000,
-                     (await first_track.download_og_image_bytes_async()),
-                     first_track.artists_name(),
-                     audio=(await first_track.download_bytes_async()))
-
     async def extract_track_from_url(self, url: str) -> Track:
         track, *_ = await self.client.tracks([self.extract_track_id(url)])
         track: yandex_music.Track
         return Track(track.title, track.duration_ms // 1000,
                      thumb=(await track.download_og_image_bytes_async()),
                      artists=track.artists_name(),
-                     audio=(await track.download_bytes_async()))
+                     audio=(await track.download_bytes_async(bitrate_in_kbps=320)),
+                     )
+
+    async def search_tracks(self, text: str, amount: int = 5):
+        res = await self.client.search(text=text, type_='track', )
+        if not res or not res.tracks:
+            return
+        tracks = res.tracks.results[:amount]
+
+        return [
+            Track(
+                track.title, track.duration_ms // 1000,
+                (await track.download_og_image_bytes_async()),
+                track.artists_name(),
+                audio=(await track.download_bytes_async(bitrate_in_kbps=320)),
+                url=(await track.get_download_info_async(get_direct_links=True))[0].direct_link
+            )
+            for track in tracks
+        ]
 
     @staticmethod
     def extract_track_id(url: str):

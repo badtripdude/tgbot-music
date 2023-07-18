@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 
+import aiocache
 import aiogram
 import toml
 from loguru import logger
@@ -11,7 +12,7 @@ from loguru import logger
 sys.path.extend(['../'])
 
 from core.entities import Track, User
-from core.services import YouTubeService, YandexMusicService, UserService
+from core.services import UserService, YandexMusicServiceWithCache, YouTubeServiceWithCache
 from src.infrastructure import repository
 
 parser = argparse.ArgumentParser()
@@ -28,9 +29,37 @@ logger.add(args.logs_path + r'app.log', mode='w', level=0)
 # load config
 config = toml.load(args.config_path)
 
+# setup cache
+# You can use either classes or strings for referencing classes
+aiocache.caches.set_config({
+    'default': {
+        'cache': "aiocache.SimpleMemoryCache",
+        'serializer': {
+            'class': "aiocache.serializers.PickleSerializer"
+        },
+        'ttl': 3600
+
+    },
+    'redis': {
+        'cache': "aiocache.RedisCache",
+        'endpoint': config['CACHE']['REDIS']['host'],
+        'port': 6379,
+        'timeout': config['CACHE']['REDIS']['timeout'],
+        'serializer': {
+            'class': "aiocache.serializers.PickleSerializer"
+        },
+        'ttl': config['CACHE']['REDIS']['ttl']
+        # 'plugins': [
+        #     {'class': "aiocache.plugins.HitMissRatioPlugin"},
+        #     {'class': "aiocache.plugins.TimingPlugin"}
+        # ]
+    }
+})
+
 # initialise clients
-ya_music_client = YandexMusicService(repository.Factory.create_yandex_music(token=config['YANDEXMUSIC']['token']))
-yt = YouTubeService(repository.Factory.create_pytube_client())
+ya_music_client = YandexMusicServiceWithCache(
+    repository.Factory.create_yandex_music(token=config['YANDEXMUSIC']['token']))
+yt = YouTubeServiceWithCache(repository.Factory.create_pytube_client())
 dispatcher = aiogram.Dispatcher(bot=aiogram.Bot(token=config['TELEGRAMBOT']['token']), )
 
 # setup user service
@@ -64,21 +93,27 @@ async def process_start_command(msg: aiogram.types.Message):
                 full_name=msg.from_user.full_name,
                 )
     await user_service.register(user)
-    text = '''Привет, отправь мне ссылку ;) 
+    text = '''Привет, отправь мне ссылку или текстовое сообщение для поиска ;) 
 
 На данный момент я поддерживаю сервисы:
 1) Яндекс Музыка
-2) Youtube '''
+2) Youtube 
+
+* поиск на данный момент производится в ЯндексМузыка
+
+
+исходный код бота: https://github.com/badtripdude/tgbot-music'''
     await msg.answer(text)
 
 
-async def process_yandex_track(msg: aiogram.types.Message):
+async def process_yandex_track_url(msg: aiogram.types.Message):
     logger.info(f'process ya track from `{msg.from_user.id}`')
+    msg.text.rstrip('?utm_medium=copy_link')
     track = await ya_music_client.extract_track_from_url(msg.text)
     await send_track(track, msg)
 
 
-async def process_youtube_video(msg: aiogram.types.Message):
+async def process_youtube_video_url(msg: aiogram.types.Message):
     logger.info(f'process yt video from `{msg.from_user.id}`')
     track = await yt.extract_track_from_url(msg.text)
     if 300 < track.duration:
@@ -89,23 +124,43 @@ async def process_youtube_video(msg: aiogram.types.Message):
 
 async def process_search_request(msg: aiogram.types.Message):
     logger.info(f'process search request `{msg.text}` from `{msg.from_user.id}`')
-    track = await ya_music_client.search_first_track(msg.text)
+    track: [object] = await ya_music_client.search_tracks(text=msg.text, amount=1)
 
     if not track:
         await msg.answer('Ничего не удалось найти :(')
         return
-    await send_track(track, msg)
+    await send_track(track[0], msg)
+
+
+async def process_inline_search(inline_query: aiogram.types.InlineQuery):
+    import hashlib
+    text = inline_query.query
+    logger.info(f'inline query `{text}` by {inline_query.from_user.id}')
+    tracks = await ya_music_client.search_tracks(text, amount=1)
+    result_id = hashlib.md5(text.encode()).hexdigest()
+    items = [aiogram.types.InlineQueryResultAudio(
+        id=result_id,
+        audio_url=track.url,
+        title=track.title,
+        performer=', '.join(track.artists),
+
+    ) for track in tracks]
+    await inline_query.bot.answer_inline_query(inline_query.id,
+                                               results=items, cache_time=60,
+                                               )
 
 
 # main
 async def main():
     # register telegram message handlers
-    dispatcher.register_message_handler(process_yandex_track, regexp=r'https://music.yandex.')
-    dispatcher.register_message_handler(process_youtube_video,
+    dispatcher.register_message_handler(process_yandex_track_url, regexp=r'https://music.yandex.')
+    dispatcher.register_message_handler(process_youtube_video_url,
                                         regexp='https://www.youtube.com/watch|https://youtu.be', )
     dispatcher.register_message_handler(process_start_command, commands=['start', 'help'], state='*')
     dispatcher.register_message_handler(process_search_request, content_types=aiogram.types.ContentType.TEXT)
 
+    # dispatcher.register_message_handler()
+    dispatcher.register_inline_handler(process_inline_search, lambda q: q.query)
     # create io tasks
     loop.create_task(dispatcher.start_polling())
 

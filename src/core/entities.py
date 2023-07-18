@@ -8,6 +8,7 @@ class Track:
     thumb: bytes
     artists: [str]
     audio: bytes
+    url: str = None
 
 
 @dataclass()

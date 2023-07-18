@@ -6,12 +6,13 @@ from .entities import Track, User
 
 
 class YandexMusic(abc.ABC):
-    @abc.abstractmethod
-    async def search_first_track(self, text: str) -> Track | None:
-        ...
 
     @abc.abstractmethod
     async def extract_track_from_url(self, url: str) -> Track:
+        ...
+
+    @abc.abstractmethod
+    async def search_tracks(self, text: str, amount: int = 5):
         ...
 
 
