@@ -88,6 +88,7 @@ async def send_track(track: Track, msg):
 # controllers
 
 async def process_start_command(msg: aiogram.types.Message):
+    logger.info(f'process start from user `{msg.from_user}`')
     user = User(telegram_chat_id=msg.from_user.id,
                 username=msg.from_user.username,
                 full_name=msg.from_user.full_name,
@@ -99,7 +100,7 @@ async def process_start_command(msg: aiogram.types.Message):
 1) Яндекс Музыка
 2) Youtube 
 
-* поиск на данный момент производится в ЯндексМузыка
+* поиск по тексту на данный момент производится с помощью сервиса ЯндексМузыка
 
 
 исходный код бота: https://github.com/badtripdude/tgbot-music'''
@@ -107,14 +108,14 @@ async def process_start_command(msg: aiogram.types.Message):
 
 
 async def process_yandex_track_url(msg: aiogram.types.Message):
-    logger.info(f'process ya track from `{msg.from_user.id}`')
+    logger.info(f'process ya track from `{msg.from_user}`')
     msg.text = msg.text.rstrip('?utm_medium=copy_link')
     track = await ya_music_client.extract_track_from_url(msg.text)
     await send_track(track, msg)
 
 
 async def process_youtube_video_url(msg: aiogram.types.Message):
-    logger.info(f'process yt video from `{msg.from_user.id}`')
+    logger.info(f'process yt video from `{msg.from_user}`')
     track = await yt.extract_track_from_url(msg.text)
     if 300 < track.duration:
         await msg.answer('Длительность видео не может превышать 5 минут.')
@@ -123,7 +124,7 @@ async def process_youtube_video_url(msg: aiogram.types.Message):
 
 
 async def process_search_request(msg: aiogram.types.Message):
-    logger.info(f'process search request `{msg.text}` from `{msg.from_user.id}`')
+    logger.info(f'process search request `{msg.text}` from `{msg.from_user}`')
     track: [object] = await ya_music_client.search_tracks(text=msg.text, amount=1)
 
     if not track:
@@ -135,7 +136,7 @@ async def process_search_request(msg: aiogram.types.Message):
 async def process_inline_search(inline_query: aiogram.types.InlineQuery):
     import hashlib
     text = inline_query.query
-    logger.info(f'inline query `{text}` by {inline_query.from_user.id}')
+    logger.info(f'inline query `{text}` by {inline_query.from_user}')
     tracks = await ya_music_client.search_tracks(text, amount=1)
     result_id = hashlib.md5(text.encode()).hexdigest()
     items = [aiogram.types.InlineQueryResultAudio(
@@ -159,7 +160,6 @@ async def main():
     dispatcher.register_message_handler(process_start_command, commands=['start', 'help'], state='*')
     dispatcher.register_message_handler(process_search_request, content_types=aiogram.types.ContentType.TEXT)
 
-    # dispatcher.register_message_handler()
     dispatcher.register_inline_handler(process_inline_search, lambda q: q.query)
     # create io tasks
     loop.create_task(dispatcher.start_polling())
