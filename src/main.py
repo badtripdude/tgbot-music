@@ -108,7 +108,7 @@ async def process_start_command(msg: aiogram.types.Message):
 
 async def process_yandex_track_url(msg: aiogram.types.Message):
     logger.info(f'process ya track from `{msg.from_user.id}`')
-    msg.text.rstrip('?utm_medium=copy_link')
+    msg.text = msg.text.rstrip('?utm_medium=copy_link')
     track = await ya_music_client.extract_track_from_url(msg.text)
     await send_track(track, msg)
 
