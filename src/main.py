@@ -49,10 +49,6 @@ aiocache.caches.set_config({
             'class': "aiocache.serializers.PickleSerializer"
         },
         'ttl': config['CACHE']['REDIS']['ttl']
-        # 'plugins': [
-        #     {'class': "aiocache.plugins.HitMissRatioPlugin"},
-        #     {'class': "aiocache.plugins.TimingPlugin"}
-        # ]
     }
 })
 

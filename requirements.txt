@@ -1,6 +1,6 @@
 aiogram==2.25.1
 loguru==0.7.0
-pytube@ git+https://github.com/badtripdude/pytube
+pytube==15.0.0
 toml==0.10.2
 yandex-music==2.1.1
 aiomysql==0.2.0
