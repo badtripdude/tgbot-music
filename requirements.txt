@@ -1,0 +1,4 @@
+pytube@ git+https://github.com/badtripdude/pytube
+python-telegram-bot == 20.7
+yandex-music
+loguru
