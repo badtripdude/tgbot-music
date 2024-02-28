@@ -1,16 +1,6 @@
 from dataclasses import dataclass
 
 
-@dataclass()
-class Track:
-    title: str
-    duration: int
-    thumb: bytes
-    artists: [str]
-    audio: bytes
-    audio_url: str = None
-
-
 class TrackV2:
     async def get_title(self) -> str:
         ...

@@ -27,7 +27,7 @@ class DatabaseManager:
                 cursor.execute('''
                     INSERT INTO users (telegram_id, username, first_name, last_name)
                     VALUES (?, ?, ?, ?)
-                ''', (telegram_id, username, first_name, last_name ))
+                ''', (telegram_id, username, first_name, last_name))
                 conn.commit()
             return True
         except sqlite3.IntegrityError:  # User already exists

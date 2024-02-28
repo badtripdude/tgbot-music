@@ -4,7 +4,7 @@ import re
 
 import yandex_music
 
-from entities import Track, TrackV2
+from entities import TrackV2
 
 
 class YandexMusicService(abc.ABC):
