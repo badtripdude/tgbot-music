@@ -153,6 +153,7 @@ async def youtube_choosing(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.pop('query')
     except Exception as e:
         await context.bot.send_message(update.effective_chat.id, 'Что-то пошло не так...')
+        raise e
     return ConversationHandler.END
 
 
@@ -181,16 +182,7 @@ async def list_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text('ищем в YandexMusic...')
         await send_track((await yam.search_tracks(context.user_data.get('query', 'rickroll'), 1))[0],
                          update, context)
-
-    if query.data == 'yt_video':
-        await query.delete_message()
-        video, = await yt_obj.search_video(context.user_data.get('query', 'rickroll'))
-        await context.bot.send_video(update.effective_chat.id, video.buffer)
-
-    if query.data == 'yt_audio':
-        await send_track((await yt_obj.search_tracks(context.user_data.get('query', 'rickroll')))[0],
-                         update, context)
-        await query.delete_message()
+        return ConversationHandler.END
 
 
 async def inline_mod(update: Update, context: ContextTypes.DEFAULT_TYPE):
